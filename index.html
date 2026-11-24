@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find Your Seat</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #f3f6fa; color: #17324d;
+  font-family: Arial, sans-serif;
+}
+main { max-width: 650px; margin: auto; padding: 24px 16px; }
+h1 { margin-bottom: 8px; }
+p { line-height: 1.5; }
+input {
+  width: 100%; padding: 16px; font-size: 18px;
+  border: 2px solid #789; border-radius: 12px;
+}
+button {
+  display: block; width: 100%; margin-top: 10px;
+  padding: 14px; border: 1px solid #aac;
+  border-radius: 10px; background: white;
+  color: #17324d; text-align: left; font-size: 17px;
+  cursor: pointer;
+}
+button:hover, button:focus { background: #e3eef6; }
+.card {
+  background: white; padding: 18px; margin-top: 20px;
+  border-radius: 16px; box-shadow: 0 3px 14px #0001;
+}
+#assignment { font-size: 22px; font-weight: bold; }
+svg { width: 100%; display: block; }
+.note { font-size: 14px; color: #526478; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+<h1>Find Your Seat</h1>
+<p>Enter your name, then tap your matching result.</p>
+<label for="search">Guest name</label>
+<input id="search" type="search" placeholder="Type your name…"
+       autocomplete="off">
+<div id="results" aria-live="polite"></div>
+
+<section id="details" class="card" hidden>
+  <h2 id="guest"></h2>
+  <p id="assignment"></p>
+  <h3>Your seat</h3>
+  <p class="note">
+    Your seat is orange. Seat 1 is at the top;
+    seats 2–10 go clockwise.
+  </p>
+  <svg id="seatmap" viewBox="0 0 340 340"
+       role="img" aria-label="Your assigned seat"></svg>
+</section>
+
+<section class="card">
+  <h2>Table diagram</h2>
+  <p class="note">
+    Your table turns orange after you select your name.
+    This is a schematic, not confirmed ballroom locations.
+  </p>
+  <svg id="room" viewBox="0 0 400 550"
+       role="img" aria-label="Eight-table seating diagram"></svg>
+</section>
+<p class="note">Can't identify your assignment? Ask the event host.</p>
+</main>
+
+<script>
+const tables = [
+ ["Sayli","Fernando","Rosario","Edward","Orestes",
+  "Olga","Dania","Toni","Joshua","Lenin"],
+ ["Yoel","Fanny","Yanelle","Yunior","Yasmin",
+  "Cris","Elbia","Woody","Kathy","Amy Spear"],
+ ["Daniel","Liz","Dilan","Ivan","Sol","Amy Lopez",
+  "Arbelio","Esposa","",""],
+ ["Christina","Oceana","Isabella","Azael","Javier",
+  "Esposa","Alejandro","Steven","Ninita",""],
+ ["Christian Turner","William Turner","Angie Turner",
+  "Macy (Connor's mom)","","","","","",""],
+ ["Garry","Julie","Derreck","Jazmin","Michelle",
+  "Jimmy","Danna","Isabella","Liam","Christian"],
+ ["Jason","Cortnie","Olivia","Avi","Felix",
+  "Evan","Baby","Yesenia","Maria","Joshua"],
+ ["Scarlett","Lulu","Aero","Jesus","Travis Parker",
+  "Angela Parker","Ashley","Brynlee","Devin",""]
+];
+
+const guests = tables.flatMap((names, t) =>
+  names.flatMap((name, s) =>
+    name ? [{name, table: t + 1, seat: s + 1}] : []
+  )
+);
+
+const $ = id => document.getElementById(id);
+const normalize = text => text.normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+function element(tag, attrs, text) {
+  const node = document.createElementNS(
+    "http://www.w3.org/2000/svg", tag
+  );
+  Object.entries(attrs).forEach(([key, value]) =>
+    node.setAttribute(key, value)
+  );
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function circle(svg, x, y, radius, fill) {
+  svg.appendChild(element("circle", {
+    cx: x, cy: y, r: radius, fill,
+    stroke: "#17324d", "stroke-width": 2
+  }));
+}
+
+function label(svg, x, y, text, color = "#17324d", size = 16) {
+  svg.appendChild(element("text", {
+    x, y, fill: color, "text-anchor": "middle",
+    "dominant-baseline": "middle",
+    "font-family": "Arial", "font-size": size,
+    "font-weight": "bold"
+  }, text));
+}
+
+function drawRoom(selected = 0) {
+  const svg = $("room");
+  svg.replaceChildren();
+  for (let t = 1; t <= 8; t++) {
+    const x = t % 2 ? 105 : 295;
+    const y = 75 + Math.floor((t - 1) / 2) * 130;
+    circle(svg, x, y, 47, t === selected ? "#ffb347" : "#17324d");
+    label(svg, x, y, "Table " + t,
+          t === selected ? "#17324d" : "white");
+  }
+}
+
+function selectGuest(person) {
+  $("details").hidden = false;
+  $("guest").textContent = person.name;
+  $("assignment").textContent =
+    "Table " + person.table + " · Seat " + person.seat;
+  drawRoom(person.table);
+
+  const svg = $("seatmap");
+  svg.replaceChildren();
+  svg.setAttribute("aria-label",
+    "Table " + person.table + ", seat " + person.seat + " highlighted");
+  circle(svg, 170, 170, 65, "#17324d");
+  label(svg, 170, 170, "Table " + person.table, "white", 20);
+
+  for (let seat = 1; seat <= 10; seat++) {
+    const angle = -Math.PI / 2 + (seat - 1) * Math.PI / 5;
+    const x = 170 + 116 * Math.cos(angle);
+    const y = 170 + 116 * Math.sin(angle);
+    const occupied = tables[person.table - 1][seat - 1];
+    const fill = seat === person.seat
+      ? "#ffb347" : occupied ? "#d6e8f2" : "#ffffff";
+    circle(svg, x, y, 23, fill);
+    label(svg, x, y, seat);
+  }
+  $("details").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+$("search").addEventListener("input", () => {
+  const query = normalize($("search").value);
+  const results = $("results");
+  results.replaceChildren();
+  $("details").hidden = true;
+  drawRoom();
+
+  if (query.length < 2) return;
+  const matches = guests.filter(p => normalize(p.name).includes(query));
+  if (!matches.length) {
+    results.textContent = "No match. Try another spelling or ask the host.";
+    return;
+  }
+  matches.forEach(person => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = person.name +
+      " — Table " + person.table + ", Seat " + person.seat;
+    button.addEventListener("click", () => selectGuest(person));
+    results.appendChild(button);
+  });
+});
+
+drawRoom();
+</script>
+</body>
+</html>
